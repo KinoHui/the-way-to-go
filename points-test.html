@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Points 测试页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .container {
+            background-color: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+
+        .button:hover {
+            background-color: #45a049;
+        }
+
+        .info-box {
+            background-color: white;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+
+        .success {
+            color: green;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Points 测试页面</h1>
+
+        <div>
+            <button id="connectButton" class="button">连接钱包</button>
+        </div>
+
+        <div class="info-box">
+            <h3>用户信息</h3>
+            <p>地址: <span id="userAddress">未连接</span></p>
+            <p>积分: <span id="userPoints">0</span></p>
+            <p>创建时间: <span id="createTime">-</span></p>
+            <p>更新时间: <span id="updateTime">-</span></p>
+        </div>
+
+        <div class="info-box">
+            <h3>JWT Token</h3>
+            <p style="word-break: break-all;" id="jwtToken">未获取</p>
+        </div>
+
+        <div id="error" class="error"></div>
+        <div id="success" class="success"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080/api';
+        let currentToken = '';
+
+        async function connectWallet() {
+            try {
+                // 检查是否安装了 MetaMask
+                if (typeof window.ethereum === 'undefined') {
+                    showError('请安装 MetaMask!');
+                    return;
+                }
+
+                // 请求用户连接钱包
+                const accounts = await window.ethereum.request({
+                    method: 'eth_requestAccounts'
+                });
+                const address = accounts[0];
+
+                // 获取签名
+                const message = "hello";
+                const signature = await window.ethereum.request({
+                    method: 'personal_sign',
+                    params: [message, address],
+                });
+
+                // 调用后端接口
+                const response = await fetch(`${API_BASE}/wallet/connect`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        address,
+                        message,
+                        signature,
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    updateUI(data);
+                    showSuccess('连接成功！');
+                } else {
+                    showError(data.error || '连接失败');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError(error.message);
+            }
+        }
+
+        function updateUI(data) {
+            document.getElementById('userAddress').textContent = data.user.address;
+            document.getElementById('userPoints').textContent = data.user.total_points;
+            document.getElementById('createTime').textContent = new Date(data.user.create_time).toLocaleString();
+            document.getElementById('updateTime').textContent = new Date(data.user.update_time).toLocaleString();
+            document.getElementById('jwtToken').textContent = data.token;
+            currentToken = data.token;
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.getElementById('success');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            setTimeout(() => {
+                successDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // 添加事件监听器
+        document.getElementById('connectButton').addEventListener('click', connectWallet);
+
+        // 监听钱包账户变化
+        if (typeof window.ethereum !== 'undefined') {
+            window.ethereum.on('accountsChanged', function (accounts) {
+                document.getElementById('userAddress').textContent = '未连接';
+                document.getElementById('userPoints').textContent = '0';
+                document.getElementById('createTime').textContent = '-';
+                document.getElementById('updateTime').textContent = '-';
+                document.getElementById('jwtToken').textContent = '未获取';
+                currentToken = '';
+                showSuccess('钱包账户已更改，请重新连接');
+            });
+        }
+    </script>
+</body>
+
+</html>
